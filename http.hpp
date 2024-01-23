@@ -1,14 +1,8 @@
 #ifndef HTTP_SERVER_H
 #define HTTP_SERVER_H
 
-// json support (Currently uses MiniJson)
-#define TINYHTTP_JSON
-
 // websocket support
 #define TINYHTTP_WS
-
-// template integration
-#define TINYHTTP_TEMPLATES
 
 #ifndef MAX_HTTP_HEADERS
 #  define MAX_HTTP_HEADERS 30
@@ -26,6 +20,9 @@
 #  define WS_FRAGMENT_THRESHOLD (2*1024) // 2kiB
 #endif
 
+#include <whb/log.h>
+#include <sysapp/launch.h>
+
 #include <cstdint>
 #include <string>
 #include <memory>
@@ -38,6 +35,7 @@
 #include <map>
 #include <iostream>
 #include <fstream>
+#include <cstring>
 
 #ifdef TINYHTTP_JSON
 #  include <json.h>
@@ -163,7 +161,10 @@ class HttpMessageCommon {
             auto f = mHeaders.find(i);
             if (f == mHeaders.end()) {
                 if (mHeaders.size() >= MAX_HTTP_HEADERS)
-                    throw std::runtime_error("too many HTTP headers");
+                {
+                    WHBLogPrintf("too many HTTP headers");
+                    SYSLaunchMenu();
+                }
 
                 mHeaders.insert(std::pair<std::string,std::string>(i, ""));
             }
@@ -373,11 +374,11 @@ class HttpHandlerBuilder : public HandlerBuilder {
 
         HttpHandlerBuilder* serveFile(std::string name) {
             return requested([name](const HttpRequest&) {
-                std::ifstream t(name);
+                std::ifstream t(name.c_str());
                 if (t.is_open())
                     return HttpResponse{200, getMimeType(name), std::string((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>())};
                 else {
-                    std::cerr << "Could not locate file: " << name << std::endl;
+                    WHBLogPrintf("Could not locate file: %s\n", name.c_str());
                     return HttpResponse{404, "text/plain", "The requested file is missing from the server"};
                 }
             });
@@ -439,7 +440,6 @@ class HttpServer {
                     if (res) return res;
                 }
         } catch (std::exception& e) {
-            std::cerr << "Exception while handling request (" << key << "): " << e.what() << std::endl;
             return std::make_shared<HttpResponse>(500, "text/plain", "500 exception while processing");
         }
 
@@ -467,7 +467,7 @@ class HttpServer {
             return h;
         }
 
-        void startListening(uint16_t port);
+        void startListening(uint16_t port, bool& isRunning);
         void shutdown();
 };
 
